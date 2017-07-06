@@ -1,5 +1,8 @@
+// -*- C++ -*-
 #ifndef PROF_IPOL_H
 #define PROF_IPOL_H
+
+#include "Professor/IIpol.h"
 
 #include "Professor/ParamPoints.h"
 #include <string>
@@ -7,15 +10,15 @@
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
+#include "ConfigHandler.h"
+#include "Professor/OutputHandler.h"
 
 namespace Professor {
 
-
-  /// Throwable error
-  struct IpolError : public std::runtime_error {
-    IpolError(const std::string& reason) : std::runtime_error(reason) { }
-  };
-
+  // /// Throwable error
+  // struct IpolError : public std::runtime_error {
+  //   IpolError(const std::string& reason) : std::runtime_error(reason) { }
+  // };
 
   /// @name Calculator functions for parameterisation elements
   //@{
@@ -71,7 +74,7 @@ namespace Professor {
 
 
   /// The heart of Professor: the interpolation of a single numerical value through the parameter space
-  class Ipol {
+  class Ipol : public IIpol {
   public:
 
     /// @brief Constructor for calculation of coefficients
@@ -100,6 +103,9 @@ namespace Professor {
       }
       _coeffs = calcCoeffs(pts, ptvals, _order, svdthreshold, _structure);
     };
+ 
+    //modified constructor for the iterative fitting
+    Ipol(ParamPoints& pts, const std::vector<double>& ptvals, const vector<double>& pterrs, int& num_ipol, bool doipol, int& order, std::vector<double>& fitparams, const string& configfile);
 
     /// Constructor to read ipol from file (one string for each object)
     /// @todo Also allow optional passing of pmins, pmaxs vectors for the case where the string includes scaling?
@@ -107,6 +113,8 @@ namespace Professor {
       fromString(s);
     };
 
+    // Virtual dtor needed:
+    virtual ~Ipol() {}
 
     /// Get string representation
     std::string toString(const std::string& name="") const;
@@ -177,29 +185,43 @@ namespace Professor {
     //@}
 
 
-    /// @name Limit-setting
-    //@{
+    /* /// @name Limit-setting */
+    /* //@{ */
 
-    void setParamLimits(const std::vector<double>& minpvs, const std::vector<double>& maxpvs) {
-      setMinParamVals(minpvs);
-      setMaxParamVals(maxpvs);
-    }
+    /* void setParamLimits(const std::vector<double>& minpvs, const std::vector<double>& maxpvs) { */
+    /*   setMinParamVals(minpvs); */
+    /*   setMaxParamVals(maxpvs); */
+    /* } */
 
-    const std::vector<double>& minParamVals() { return _minPV; }
-    const std::vector<double>& maxParamVals() { return _maxPV; }
+    /* const std::vector<double>& minParamVals() { return _minPV; } */
+    /* const std::vector<double>& maxParamVals() { return _maxPV; } */
 
-    void setMinParamVals(const std::vector<double>& minpvs) { _minPV = minpvs; }
-    void setMaxParamVals(const std::vector<double>& maxpvs) { _maxPV = maxpvs; }
+    /* void setMinParamVals(const std::vector<double>& minpvs) { _minPV = minpvs; } */
+    /* void setMaxParamVals(const std::vector<double>& maxpvs) { _maxPV = maxpvs; } */
 
-    //@}
-
+    /* //@} */
 
   private:
 
+    //mapping function of the fit parameter terms in order to use them with Professor 2.2.1
+    std::vector<int> sort_strucs(Professor::ParamPoints& pts);
+
+    //function that checks, if two vectors carry the same values or not
+    bool compare_vecs(std::vector<int>& a, std::vector<int>& b);
+
     int _dim, _order;
+
+    //structure of the gradient of the function
     std::vector<std::vector<int> > _structure;
+
     std::string _name;
-    std::vector<double> _coeffs, _minPV, _maxPV;
+    std::vector<double> _coeffs;
+
+    //function that actually performs the fit
+    void calcipol(ParamPoints& pts, const std::vector<double>& ptvals, const std::vector<double>& pterrs, int& num_ipol, const std::string& configfile);
+
+    //function that actually performs the error calculation of the fit
+    void calcerr(ParamPoints& pts, const std::vector<double>& pterrs, int& order, std::vector<double>& fitparams, int& num_ipol);
 
   };
 

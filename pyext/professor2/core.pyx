@@ -23,7 +23,6 @@ cdef class ParamPoints:
     def __del__(self):
         del self._ptr
 
-
 cdef class Ipol:
     """An interpolation of a scalar function built from a list of values across
     a set of parameter point anchors.
@@ -47,22 +46,35 @@ cdef class Ipol:
             pp = ParamPoints(args[0])
             vals = list(args[1])
             order = int(args[2])
-            name = ""
-            threshold = 1e-15 #< ???
-            if len(args) == 4:
-                try:
-                    threshold = float(args[3])
-                except:
-                    name = str(args[3])
-            if len(args) == 5:
+            if order < 0:
+                errs = list(args[3])
+                bin_num = int(args[4])
+                doipol = bool(args[5])
+                order = int(args[6])
+                fitparams = list(args[7])
+                config = str(args[8])
+                self._ptr = new c.Ipol(deref(pp._ptr), vals, errs, bin_num, doipol, order, fitparams, config)
+            else:
+                name = ""
+                threshold = 1e-15 #< ???
+                if len(args) == 4:
+                    try:
+                        threshold = float(args[3])
+                    except:
+                        name = str(args[3])
+                if len(args) == 5:
                     name = str(args[3])
                     threshold = float(args[4])
-            self._ptr = new c.Ipol(deref(pp._ptr), vals, order, name, threshold, True)
+                self._ptr = new c.Ipol(deref(pp._ptr), vals, order, name, threshold, True)
+				
 
     def __del__(self):
         del self._ptr
 
     @property
+    def coeffs(self):
+        return self._ptr.coeffs()
+
     def coeffs(self):
         return self._ptr.coeffs()
 
@@ -79,6 +91,9 @@ cdef class Ipol:
         return self._ptr.dim()
 
     @property
+    def order(self):
+        return self._ptr.order()
+
     def order(self):
         return self._ptr.order()
 
@@ -181,3 +196,17 @@ cdef class Ipol:
 
     def __repr__(self):
         return self.toString(self.name)
+
+
+
+
+
+
+
+
+
+
+
+
+
+

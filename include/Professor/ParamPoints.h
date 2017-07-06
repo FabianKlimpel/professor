@@ -7,6 +7,8 @@
 #include <vector>
 #include <cassert>
 #include <stdexcept>
+#include "Professor/LinAlg.h"
+#include "Professor/Power.h"
 
 namespace Professor {
 
@@ -124,14 +126,52 @@ namespace Professor {
     /// @todo Generalise to other sorts of key lookup? Needed? Bounds checking / checking key existence
     const std::vector<double>& point(size_t i) const { return points().at(i); }
 
+    // Setter for the indices referring to a hypercube surrounding a point with index @i
+    std::vector< size_t>& gethypercube(size_t i);
+
+    // Getter of @_hypercubes
+    std::vector< std::vector<size_t>>& hypercubes() {return _hypercubes;}
+
+    // Getter of @_structure
+    std::vector< std::vector< std::vector<double>>>& structure() {return _structure;}
+
+    // This function adds vectors to @_structure
+    void setstructure(size_t i, size_t j, std::vector<double> vec);
+
+    // Getter of @_parampoints_scaled
+    const std::vector<std::vector<double>>& points_scaled() const { return _parampoints_scaled;}
+
+    // Getter of point @i out of @_parampoints_scaled
+    const std::vector<double>& point_scaled(size_t i) const { return points_scaled().at(i); }
+    
+    // This function rescales @_parampoints and stores them in @_parampoints_scaled
+    void rescale();
+
+    // This function gets the list of powers for every parameter in every term of the polynomial function at given order @order
+    std::vector<std::vector<int>> getpower(int order) {return _pow.getpoweroforder(order);}
+
+    // Getter of @_pow
+    Power& getpow() {return _pow;}
+
+    void clearall();
 
   private:
 
-    std::vector< std::vector<double> > _parampoints;
+    // structure of the powers of the gradient vectors of the polynomial function
+    std::vector< std::vector< std::vector<double>>> _structure;
+
+    // list of indices for hypercubes of different points
+    std::vector< std::vector<size_t>> _hypercubes;
+
+    // parameter and scaled parameter values
+    std::vector< std::vector<double> > _parampoints, _parampoints_scaled;
 
     std::vector< std::string > _names;
 
     bool _locked;
+
+    // Helper class to retrieve the list of powers
+    Power _pow;
 
   };
 

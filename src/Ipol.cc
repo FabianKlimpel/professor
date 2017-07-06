@@ -282,7 +282,181 @@ namespace Professor {
 
   ///////////////////////////////////////////////////////
 
+Ipol::Ipol(ParamPoints& pts, const std::vector<double>& ptvals, const vector<double>& pterrs, int& num_ipol, bool doipol, int& order, std::vector<double>& fitparams, const string& configfile){
+	
+	pts.rescale();
+	
+	if(doipol)
+		calcipol(pts, ptvals, pterrs, num_ipol, configfile);
+	else
+		calcerr(pts, pterrs, order, fitparams, num_ipol);
+	
+	pts.clearall();
+}
+    
+    
+void Ipol::calcipol(ParamPoints& pts, const std::vector<double>& ptvals, const std::vector<double>& pterrs, int& num_ipol, const std::string& configfile) {
 
+	cout << "start with bin " << num_ipol << endl;
+		
+	_dim = pts.dim();	
+	_minPV = pts.ptmins();
+	_maxPV = pts.ptmaxs();
+	_name = "";
+			
+	ConfigHandler* ch;	
+	if(configfile.empty())
+		ch = new ConfigHandler();
+	else
+		ch = new ConfigHandler(configfile);
+
+	//create @oh that handles the output
+	OutputHandler oh(pts, ch->_outdotflag);
+	
+	if(ch->_summaryflag)
+		oh.setup_summary();
+
+	FitHandler fh;	
+	GradHandler gh;
+
+	//set @fh up on the the right bin
+	fh.startbin(pts, ptvals, pterrs, num_ipol, ch->_thresholdfit, ch->_kappa);
+
+	//calculate the new normal vectors of the data
+	gh.calculategradvectors(pts, ptvals, ch->_thresholddata, ch->_exponent, ch->_kappa);
+	//after the first iteration, this is the currently best iteration
+	//the number of the iteration will always be stored, so that it is possible to get to that later
+	//the respective quality parameter is stored, too
+	size_t bestiteration = fh.getiterationcounter();
+	double bestchi2 = fh.getchi2();
+
+	//convergence check setup
+	vector<double> chi2values;
+	chi2values.push_back(fh.getchi2());
+	double sum = 0.;
+
+	//set @quitflag to 1 is for entering the while-loop
+	int quitflag = 1;
+	//@iteration_results serves as comparison of an iteration to earlier ones, so that a better/worse statement can be made
+	vector<double> iteration_results;
+	//while a fit becomes better with more iterations, the following code will loop
+	while(quitflag)
+	{
+		//set up new monomials for the bin
+		fh.nextstep(pts, ch->_thresholdfit, ch->_kappa);
+		
+		//store a product of the current Chi^2 value and a mapped smoothness
+		iteration_results.push_back(fh.getchi2() * (1 - fh.getDsmooth(pts, gh)) / (1 + fh.getDsmooth(pts, gh)));
+		
+		//if enough iterations were made, the convergence check will be performed
+		if(iteration_results.size() >= ch->_chi2mean)
+		{
+			//calculate the mean of @iteration_results
+			for(size_t i = 0; i < iteration_results.size(); i++)
+				sum += iteration_results[i];
+		
+			sum /= iteration_results.size();
+
+			//if the current value is equal or worse the sliding mean, the loop ends
+			if(iteration_results[iteration_results.size() - 1] >= sum)
+				quitflag = 0;
+
+			//delete the first entry in @iteration_results = keeping the list always at the same length
+			iteration_results.erase(iteration_results.begin());
+		}
+
+		//reset @sum
+		sum = 0.;
+
+		//if an iteration is better than the best iteration performed, this iteration will be stored as the best iteration
+		if(iteration_results.back() < bestchi2)
+		{
+			bestchi2 = iteration_results.back();
+			bestiteration = fh.getiterationcounter();
+		}
+	}	
+
+	cout << "fit complete for bin " << num_ipol << endl;
+	
+	//recalculate the best iteration
+	fh.setiteration(pts, ptvals, pterrs, num_ipol, ch->_thresholdfit, ch->_kappa, bestiteration);			
+		
+	//write result to the terminal
+	oh.write_binresult(num_ipol, pts, gh, fh);
+		
+	//write the dotproduct-summary, if the flag is set
+	if(ch->_outdotflag)
+		oh.write_dotproduct(num_ipol, pts, gh, fh);
+	
+	//write the summary, if the flag is set
+	if(ch->_summaryflag)
+		oh.write_summary(fh, pts, gh);
+		
+	delete(ch);
+		
+	_order = fh.getmax();
+	std::vector<int> match_index = sort_strucs(pts);
+	fh.sortfitparams(match_index);
+	_coeffs = fh.getfitparams();
+	_structure = mkStructure(_dim, _order);
+
+}
+
+/**
+ * This function compares two vectors and checks, if they carry the same values or not.
+ * @a, @b: the vectors that will be compared
+ */
+bool Ipol::compare_vecs(std::vector<int>& a, std::vector<int>& b){	
+	//walk over every entry
+	for(size_t i = 0; i < a.size(); i++)
+		//if the value of at least one component is not equal, the result will be false
+		if(a[i] != b[i])
+			return false;
+	//if the loop finished, they carry the same values
+	return true;
+}
+
+/**
+ * This function performs a mapping of the order of terms of the fit parameters during the fitting and the structure, that Professor 2.2.1 wants.
+ * @pts: container of the anchor points
+ * @profstruc: the structure that Professor 2.2.1 wants
+ * @result: list of mapping numbers for later usage
+ */
+std::vector<int> Ipol::sort_strucs(ParamPoints& pts){
+
+	//calculate the Professor 2.2.1 structure
+	std::vector<std::vector<int>> profstruc = mkStructure(_dim, _order);
+	std::vector<int> result;
+
+	//walk over both list, if there is a match, write down the number in @result
+	for(size_t pi = 0; pi < profstruc.size(); pi++)
+		for(size_t i = 0; i < pts.getpower(_order).size(); i++)
+			if(compare_vecs(pts.getpower(_order)[i], profstruc[pi]))
+				result.push_back(i);
+	return result;	
+}
+
+
+
+void Ipol::calcerr(ParamPoints& pts, const std::vector<double>& pterrs, int& order, std::vector<double>& fitparams, int& num_ipol){
+
+	std::cout << "calculating error for bin " << num_ipol << endl;
+	_dim = pts.dim();	
+	_minPV = pts.ptmins();
+	_maxPV = pts.ptmaxs();
+	_name = "";
+		
+	FitHandler fh(fitparams, pterrs, pts, order, num_ipol);
+	_order = fh.getmax();
+	std::vector<int> match_index = sort_strucs(pts);
+	fh.sortfitparams(match_index);
+	_coeffs = fh.getfiterrors();
+	_structure = mkStructure(_dim, _order);
+	
+	cout << "error calculation complete for bin " << num_ipol << endl;
+}
+
+  ///////////////////////////////////////////////////////
 
   string Ipol::toString(const string& name) const {
     stringstream ss;
@@ -294,8 +468,7 @@ namespace Professor {
       ss << a << " ";
     return ss.str();
   }
-
-
+  
   /// TODO: How do we want to read in the MinMaxValues here?
   void Ipol::fromString(const string& s) {
     // Extract a name if given at the start of the string
@@ -399,6 +572,4 @@ namespace Professor {
 
     return grad;
   }
-
-
 }
